@@ -5,7 +5,7 @@ require "thread"
 Thread.abort_on_exception = true
 
 def usage!
-  $stderr.puts "Usage: rget [user@]host:remote_path local_path"
+  $stderr.puts "Usage: cget [user@]host:remote_path local_path"
   exit false
 end
 
@@ -14,7 +14,7 @@ host, remote_path = ARGV[0].split(":", 2)
 local_path = ARGV[1]
 usage! unless host && remote_path
 
-ssh = IO.popen(["ssh", host, "--", "rget-remote"], "r+b")
+ssh = IO.popen(["ssh", host, "--", "cget-remote"], "r+b")
 
 ssh.write("#{remote_path}\0")
 connections, size, port, auth_token = ssh.gets.split
