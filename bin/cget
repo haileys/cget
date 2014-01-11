@@ -29,9 +29,12 @@ threads = connections.to_i.times.map { |i|
     sock = TCPSocket.new(host, port.to_i)
     sock.puts(auth_token)
 
-    while buffer = sock.readpartial(4096 + 8)
-      offset, = buffer[0, 8].unpack("Q>")
-      queue << { action: :write, offset: offset, data: buffer[8, 4096] }
+    begin
+      while buffer = sock.readpartial(4096 + 8)
+        offset, = buffer[0, 8].unpack("Q>")
+        queue << { action: :write, offset: offset, data: buffer[8, 4096] }
+      end
+    rescue EOFError
     end
 
     queue << { action: :join, thread: Thread.current, number: i }
