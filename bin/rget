@@ -29,7 +29,7 @@ threads = connections.to_i.times.map { |i|
     sock = TCPSocket.new(host, port.to_i)
     sock.puts(auth_token)
 
-    while buffer = sock.read(4096 + 8)
+    while buffer = sock.readpartial(4096 + 8)
       offset, = buffer[0, 8].unpack("Q>")
       queue << { action: :write, offset: offset, data: buffer[8, 4096] }
     end
