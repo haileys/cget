@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+require "socket"
+require "securerandom"
+
+$stdout.sync = true
+
+CONNECTIONS = 20
+
+path = $stdin.gets("\0").chop
+file = File.open(path, "r", encoding: "BINARY")
+
+server = TCPServer.new(0)
+server_port = server.addr[1]
+
+auth_token = SecureRandom.hex(32)
+
+puts "#{CONNECTIONS} #{file.size} #{server_port} #{auth_token}"
+
+sockets = CONNECTIONS.times.map { |i|
+  while sock = server.accept
+    break sock if sock.gets.chomp == auth_token
+  end
+}
+
+while sockets.any?
+  read, write, err = IO.select([], sockets, sockets)
+
+  err.each do |sock|
+    sock.close
+    sockets.delete(sock)
+  end
+
+  write.each do |sock|
+    offset = file.pos
+    if buffer = file.read(4096)
+      sock.write([offset].pack("Q>") + buffer)
+    else
+      sock.close
+      sockets.delete(sock)
+    end
+  end
+end
+
+sockets.each(&:close)

@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+require "socket"
+require "thread"
+
+Thread.abort_on_exception = true
+
+def usage!
+  $stderr.puts "Usage: rget [user@]host:remote_path local_path"
+  exit false
+end
+
+usage! if ARGV.size < 2
+host, remote_path = ARGV[0].split(":", 2)
+local_path = ARGV[1]
+usage! unless host && remote_path
+
+ssh = IO.popen(["ssh", host, "--", "rget-remote"], "r+b")
+
+ssh.write("#{remote_path}\0")
+connections, size, port, auth_token = ssh.gets.split
+
+file = File.open(local_path, "wb")
+file.truncate(size.to_i)
+
+queue = Queue.new
+
+threads = connections.to_i.times.map { |i|
+  Thread.new do
+    sock = TCPSocket.new(host, port.to_i)
+    sock.puts(auth_token)
+
+    while buffer = sock.read(4096 + 8)
+      offset, = buffer[0, 8].unpack("Q>")
+      queue << { action: :write, offset: offset, data: buffer[8, 4096] }
+    end
+
+    queue << { action: :join, thread: Thread.current, number: i }
+  end
+}
+
+read = 0
+
+while threads.any?
+  message = queue.pop
+  case message[:action]
+  when :write
+    file.seek(message[:offset])
+    read += file.write(message[:data])
+    $stderr.print "\r #{read / 1024 / 1024} / #{file.size / 1024 / 1024} MiB"
+  when :join
+    message[:thread].join
+    threads.delete(message[:thread])
+  end
+end
+
+$stderr.puts
