@@ -1,20 +1,24 @@
 #!/usr/bin/env ruby
 require "socket"
 require "securerandom"
+require "json"
+require "cget/sender"
 
+Thread.abort_on_exception = true
 $stdout.sync = true
 
 CONNECTIONS = 20
-
-path = $stdin.gets("\0").chop
-file = File.open(path, "r", encoding: "BINARY")
 
 server = TCPServer.new(0)
 server_port = server.addr[1]
 
 auth_token = SecureRandom.hex(32)
 
-puts "#{CONNECTIONS} #{file.size} #{server_port} #{auth_token}"
+puts JSON.dump(
+  connections: CONNECTIONS,
+  server_port: server_port,
+  auth_token: auth_token,
+)
 
 sockets = CONNECTIONS.times.map { |i|
   while sock = server.accept
@@ -22,23 +26,11 @@ sockets = CONNECTIONS.times.map { |i|
   end
 }
 
-while sockets.any?
-  read, write, err = IO.select([], sockets, sockets)
+message = JSON.parse($stdin.gets)
 
-  err.each do |sock|
-    sock.close
-    sockets.delete(sock)
-  end
-
-  write.each do |sock|
-    offset = file.pos
-    if buffer = file.read(4096)
-      sock.write([offset].pack("Q>") + buffer)
-    else
-      sock.close
-      sockets.delete(sock)
-    end
-  end
+case message["type"]
+when "send"
+  file = File.open(message["path"], "rb")
+  puts file.size
+  CGet::Sender.new(file, sockets).run
 end
-
-sockets.each(&:close)
