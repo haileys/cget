@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 require "socket"
 require "thread"
+require "cget/speed_calculator"
 
 Thread.abort_on_exception = true
 
@@ -41,15 +42,23 @@ threads = connections.to_i.times.map { |i|
   end
 }
 
-read = 0
+total_read = 0
+
+speed_calculator = CGet::SpeedCalculator.new
+speed_calculator.sample(0)
 
 while threads.any?
   message = queue.pop
   case message[:action]
   when :write
+    if message[:offset] > size.to_i
+      $stderr.puts "\nBad offset: #{message[:offset]}"
+      exit false
+    end
     file.seek(message[:offset])
-    read += file.write(message[:data])
-    $stderr.print "\r #{read / 1024 / 1024} / #{file.size / 1024 / 1024} MiB"
+    total_read += file.write(message[:data])
+    speed_calculator.sample(total_read)
+    $stderr.print "\r #{total_read / 1024 / 1024} / #{file.size / 1024 / 1024} MiB (#{speed_calculator.formatted_speed})"
   when :join
     message[:thread].join
     threads.delete(message[:thread])
